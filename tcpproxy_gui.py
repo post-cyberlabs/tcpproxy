@@ -8,22 +8,23 @@ from PyQt5.QtCore import Qt, pyqtSlot, QThread, pyqtSignal
 from tcpproxy_cli import TCPProxyClient
 import redis,json,base64,hexdump,re
 import difflib
+import binascii
 
 class TCPProxyPaneConvs(QTableWidget):
     fields = [ "src", "dst",  "dstport", "packets", "bytes" , "hostname", "tags" ]
     signal = pyqtSignal('PyQt_PyObject')
-    
+
     def __init__(self):
         super().__init__()
         self.initUI(("Source","Destination","Port","Packets","Bytes","Hostname","Tags"))
-        
+
     def initUI(self, headers):
         self.setColumnCount(len(headers))
         self.setRowCount(0)
         self.setSortingEnabled(True)
         self.setWordWrap(False)
         self.setHorizontalHeaderLabels(headers)
-        
+
         self.doubleClicked.connect(self.on_click)
 
     def load(self, convs):
@@ -32,15 +33,15 @@ class TCPProxyPaneConvs(QTableWidget):
         for conv in convs:
             self.setConv(i,conv)
             i += 1
-            
+
         self.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
-    
+
     bytes = {}
     packets = {}
-    
+
     def getHash(self, conv):
         return "/".join([conv["src"],conv["dst"],conv["dstport"],conv["hostname"],conv["tags"]])
-    
+
     def decode(self, conv):
         for field in self.fields:
             if isinstance(conv[field], bytes):
@@ -73,16 +74,16 @@ class TCPProxyPaneConvs(QTableWidget):
                 self.setItem(index, i, QTableWidgetItem(conv[field]))
             self.item(index,i).setFlags(self.item(index,i).flags() & ~Qt.ItemIsEditable)
             i += 1
-        
+
         hash = self.getHash(conv)
         self.packets[hash] = self.item(index,3)
         self.bytes[hash] = self.item(index,4)
-    
+
     def clear(self):
         self.bytes = {}
         self.packets = {}
         self.setRowCount(0)
-    
+
     def getDataSize(self, msg):
         return len(base64.b64decode(msg["data"]))
 
@@ -97,7 +98,7 @@ class TCPProxyPaneConvs(QTableWidget):
             i = self.rowCount()
             self.setRowCount(i + 1)
             self.setConv(i, msg)
-        
+
         try:
             nbpackets = int(self.packets[hash].text())
             self.packets[hash].setText(str(nbpackets + 1))
@@ -115,12 +116,12 @@ class TCPProxyPaneConvs(QTableWidget):
             self.signal.emit((key, data))
             item.setSelected(False)
             self.setColumnBackground(item.column(), QBrush(QColor(250,218,94)),data)
-            
+
     def setColumnBackground(self, column, brush, filter = None):
         for i in range (0, self.rowCount()):
             if not filter or filter == self.item(i, column).text():
                 self.item(i, column).setBackground(brush)
-                
+
     def clearBackground(self, column = -1):
         if column >= 0:
             for i in range (0, self.rowCount()):
@@ -131,13 +132,13 @@ class TCPProxyPaneConvs(QTableWidget):
 
 class DebugThread(QThread):
     signal = pyqtSignal('PyQt_PyObject')
-    
+
     def __init__(self, hostname):
-        self.running = False 
+        self.running = False
         self.hostname = hostname
         self.client = TCPProxyClient(self.hostname)
         QThread.__init__(self)
-        
+
     def run(self):
         self.running = True
         self.client.register_debug()
@@ -154,13 +155,13 @@ class DebugThread(QThread):
 
 class InspectThread(QThread):
     signal = pyqtSignal('PyQt_PyObject')
-    
+
     def __init__(self, hostname):
-        self.running = False 
+        self.running = False
         self.hostname = hostname
         self.client = TCPProxyClient(self.hostname)
         QThread.__init__(self)
-        
+
     def run(self):
         self.running = True
         self.client.register_inspect()
@@ -176,30 +177,30 @@ class InspectThread(QThread):
                 self.client.register_inspect()
 
 class TCPProxyPaneFile(QTableWidget):
-    
+
     fields = [ "key", "encoding",  "data" ]
 
     def __init__(self, filetype="root"):
         super().__init__()
         self.initUI(("Redis Key", "Encoding", "Data"))
         self.filetype = filetype
-        
+
     def initUI(self, headers):
         self.setColumnCount(len(headers))
         self.setRowCount(0)
         self.setWordWrap(False)
 
         self.setHorizontalHeaderLabels(headers)
-        
+
     def load(self, dataset):
         self.setRowCount(len(dataset))
         i = 0
         for item in dataset:
             self.setDataItem(i,item)
             i += 1
-            
+
         self.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
-    
+
     def setDataItem(self, index, data):
         i=0
         for field in self.fields:
@@ -221,13 +222,13 @@ class TCPProxyPaneFile(QTableWidget):
             return data.decode("utf-8")
         else:
             return ""
-    
+
     def add(self):
         row = self.rowCount()
         self.setRowCount(row + 1)
 
         self.setDataItem(row, { "key":"temp","encoding":"base64","data":"" })
-        
+
     def getSelectedKey(self):
         for item in self.selectedItems():
             row = item.row()
@@ -237,23 +238,23 @@ class TCPProxyPaneFile(QTableWidget):
             else:
                 encoding = self.item(row, 1).text()
                 return self.filetype + ":" + encoding +":" + key
-    
+
     def setRule(self, index, rule):
         i=0
         for field in self.fields[0:6]:
             self.setItem(index, i, QTableWidgetItem(str(rule[field])))
             i += 1
-            
+
         self.setItem(index, i, QTableWidgetItem(" ".join(rule["rules"])))
-        
+
 class TCPProxyPaneData(QTableWidget):
-    
+
     fields = [ "id", "level", "module", "src", "srcport", "c2s", "dst", "dstport","hostname","tags","data" ]
-    
+
     def __init__(self):
         super().__init__()
         self.initUI(("Id", "Level", "Module", "Source","Port","Dir","Destination","Port","Hostname","Tags","Data"))
-        
+
     def initUI(self, headers):
         self.setColumnCount(len(headers))
         self.setRowCount(0)
@@ -265,10 +266,10 @@ class TCPProxyPaneData(QTableWidget):
     def add(self, data, i):
         self.setRowCount(self.rowCount() + 1)
         self.setData(self.rowCount()-1, data, i)
-        
+
     def resize(self):
         self.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
-        
+
     def setIntItem(self, index, i, value):
         item = QTableWidgetItem()
         item.setData(Qt.EditRole, int(value))
@@ -299,9 +300,9 @@ class TCPProxyPaneData(QTableWidget):
                 self.setIntItem(index, ifield, data[field])
             else:
                 self.setItem(index, ifield, QTableWidgetItem(data[field]))
-            
+
             self.item(index,ifield).setFlags(self.item(index,ifield).flags() & ~Qt.ItemIsEditable)
-            
+
             ifield += 1
 
         if data["level"] in ["INFO"]:
@@ -316,29 +317,29 @@ class TCPProxyPaneData(QTableWidget):
             self.item(index, 1).setBackground(QBrush(QColor(0,204,102)))
 
 class TCPProxyPaneRules(QTableWidget):
-    
+
     fields = ["src", "dst", "hostname", "dstport", "c2s", "s2c", "rules"]
-    
+
     def __init__(self):
         super().__init__()
         self.initUI(("Source", "Dest","Hostname","Port","C2S","S2C","Rules"))
-        
+
     def initUI(self, headers):
         self.setColumnCount(len(headers))
         self.setRowCount(0)
         self.setWordWrap(False)
 
         self.setHorizontalHeaderLabels(headers)
-        
+
         self.doubleClicked.connect(self.on_click)
-        
+
     def load(self, rules):
         self.setRowCount(len(rules))
         i = 0
         for rule in rules:
             self.setRule(i,rule)
             i += 1
-            
+
         self.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
 
     def add(self):
@@ -347,14 +348,14 @@ class TCPProxyPaneRules(QTableWidget):
             row = item.row() + 1
             self.insertRow(row)
             break
-            
+
         if row == None:
             row = self.rowCount()
             self.setRowCount(row + 1)
 
         self.setRule(row, { "src":".*","dst":".*","hostname":"None","dstport":"0-65535","c2s":"True","s2c":"True","rules":["stats"] })
         self.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
-    
+
     def setRule(self, index, rule):
         i=0
         for field in self.fields[0:6]:
@@ -363,9 +364,9 @@ class TCPProxyPaneRules(QTableWidget):
             #else:
             self.setItem(index, i, QTableWidgetItem(str(rule[field])))
             i += 1
-            
+
         self.setItem(index, i, QTableWidgetItem(" ".join(rule["rules"])))
-        
+
     def getRule(self, index):
         rule = {}
         i = 0
@@ -378,52 +379,52 @@ class TCPProxyPaneRules(QTableWidget):
             elif field == "rules":
                 rule[field] = rule[field].split(" ")
             i += 1
-            
+
         return rule
 
     def getRules(self):
         rules = []
         for i in  range(0, self.rowCount()):
             rules.append(self.getRule(i))
-            
+
         return rules
-        
+
     def delete(self):
         for item in self.selectedItems():
             row = item.row()
             self.removeRow(row)
             break
-        
+
     @pyqtSlot()
     def on_click(self):
         pass
-    
+
 class TCPProxyPanes(QWidget):
     def __init__(self):
-        super().__init__()        
+        super().__init__()
         self.initUI()
-        
+
     def initUI(self):
         hbox = QHBoxLayout(self)
 
         self.convs = TCPProxyPaneConvs()
         self.convs.setFrameShape(QFrame.StyledPanel)
- 
+
         self.tab_stats = QTabWidget()
         self.tab_stats.insertTab(0, self.convs, "Conversations")
- 
+
         self.rules = TCPProxyPaneRules()
         self.rules.setFrameShape(QFrame.StyledPanel)
-        
+
         self.modules = QTextEdit()
         self.modules.setFrameShape(QFrame.StyledPanel)
 
         self.files = TCPProxyPaneFile("file")
         self.files.setFrameShape(QFrame.StyledPanel)
-        
+
         self.certs = TCPProxyPaneFile("root")
         self.certs.setFrameShape(QFrame.StyledPanel)
-        
+
         self.tab_settings = QTabWidget()
         self.tab_settings.insertTab(0, self.rules, "Rules")
         self.tab_settings.insertTab(1, self.modules, "Modules")
@@ -432,9 +433,9 @@ class TCPProxyPanes(QWidget):
 
         self.data = TCPProxyPaneData()
         self.data.setFrameShape(QFrame.StyledPanel)
-        
+
         self.tab_msg = QTabWidget()
-        
+
         self.strmsg = QPlainTextEdit()
         self.strmsg.setFrameShape(QFrame.StyledPanel)
         self.strmsg.blockSignals(True)
@@ -442,7 +443,7 @@ class TCPProxyPanes(QWidget):
         font.setFamily("Courier New")
         self.strmsg.setFont(font)
         self.tab_msg.insertTab(0, self.strmsg, "String")
-        
+
         self.hexmsg = QPlainTextEdit()
         self.hexmsg.setFrameShape(QFrame.StyledPanel)
         self.hexmsg.blockSignals(True)
@@ -451,13 +452,29 @@ class TCPProxyPanes(QWidget):
         self.hexmsg.setFont(font)
         self.tab_msg.insertTab(1, self.hexmsg, "Hex")
 
+        self.hexstreammsg = QPlainTextEdit()
+        self.hexstreammsg.setFrameShape(QFrame.StyledPanel)
+        self.hexstreammsg.blockSignals(True)
+        font = self.hexstreammsg.font()
+        font.setFamily("Courier New")
+        self.hexstreammsg.setFont(font)
+        self.tab_msg.insertTab(2, self.hexstreammsg, "Hex Stream")
+
         self.gzipmsg = QPlainTextEdit()
         self.gzipmsg.setFrameShape(QFrame.StyledPanel)
         self.gzipmsg.blockSignals(True)
         font = self.gzipmsg.font()
         font.setFamily("Courier New")
         self.gzipmsg.setFont(font)
-        self.tab_msg.insertTab(2, self.gzipmsg, "Gzip Decode")
+        self.tab_msg.insertTab(3, self.gzipmsg, "Gzip Decode")
+
+        self.callbackmsg = QPlainTextEdit()
+        self.callbackmsg.setFrameShape(QFrame.StyledPanel)
+        self.callbackmsg.blockSignals(True)
+        font = self.callbackmsg.font()
+        font.setFamily("Courier New")
+        self.callbackmsg.setFont(font)
+        self.tab_msg.insertTab(4, self.callbackmsg, "Callback Decode")
 
         splitter1 = QSplitter(Qt.Horizontal)
         splitter1.addWidget(self.tab_stats)
@@ -477,12 +494,12 @@ class TCPProxyPanes(QWidget):
 class TCPProxyApp(QMainWindow):
     def __init__(self, argv):
         super().__init__()
-        
+
         if len(sys.argv) > 1:
             self.tcpproxy_host = sys.argv[1]
         else:
             self.tcpproxy_host = "127.0.0.1"
-            
+
         self.tcpproxy = None
         self.debugger = None
         self.data = []
@@ -491,31 +508,31 @@ class TCPProxyApp(QMainWindow):
         self.selected_rawdata = None
 
         self.initUI()
-        
+
     def initUI(self):
-        
+
         self.menubar = self.menuBar()
         self.statusBar().showMessage('Not connected')
-        
+
         self.panes = TCPProxyPanes()
-        
+
         self.initMenuData()
         self.initMenuRules()
         self.initMenuStats()
         self.initMenuActions()
-        
+
         self.setCentralWidget(self.panes)
-        
+
         self.resize(800,600)
         self.setWindowTitle("TCPProxy GUI")
-        
+
         self.setWindowIcon(QIcon('icons/tcpproxy.png'))
-        
+
         self.show()
 
     def initMenuData(self):
         self.panes.data.itemSelectionChanged.connect(self.on_data_selected)
-        
+
         menu = self.menubar.addMenu('&Data')
         toolbar = self.addToolBar('Data')
 
@@ -538,7 +555,7 @@ class TCPProxyApp(QMainWindow):
         loadAct = QAction(QIcon('icons/dump.png'), '&Load data file', self)
         loadAct.setStatusTip('Load debugger data')
         loadAct.triggered.connect(self.on_load_data)
-        
+
         saveFilteredinAct = QAction(QIcon('icons/save.png'), '&Save filtered-in data to file', self)
         saveFilteredinAct.setStatusTip('Save filtered-in debugger data')
         saveFilteredinAct.triggered.connect(self.on_save_filteredin_data)
@@ -551,10 +568,10 @@ class TCPProxyApp(QMainWindow):
 
         menu.addAction(clearAct)
         toolbar.addAction(clearAct)
-        
+
         menu.addAction(loadAct)
         toolbar.addAction(loadAct)
-        
+
         menu.addAction(saveAct)
         toolbar.addAction(saveAct)
         menu.addAction(saveFilteredinAct)
@@ -589,7 +606,7 @@ class TCPProxyApp(QMainWindow):
         actiontoolbar.addAction(reloadAct)
         actiontoolbar.addAction(clearAct)
         actiontoolbar.addAction(filterAct)
-        
+
         self.panes.tab_stats.setCornerWidget(actiontoolbar)
 
     def initMenuActions(self):
@@ -597,10 +614,13 @@ class TCPProxyApp(QMainWindow):
         self.panes.files.itemSelectionChanged.connect(self.on_file_selected)
         self.panes.strmsg.textChanged.connect(self.on_strtext_changed)
         self.panes.hexmsg.textChanged.connect(self.on_hextext_changed)
+        self.panes.callbackmsg.textChanged.connect(self.on_callbacktext_changed)
+        self.panes.hexstreammsg.textChanged.connect(self.on_hexstream_changed)
+        self.panes.gzipmsg.textChanged.connect(self.on_gziptext_changed)
 
         menu = self.menubar.addMenu('&Actions')
         toolbar = self.addToolBar('Actions')
-        
+
         addCertAct = QAction(QIcon('icons/add.png'), '&Add Cert', self)
         addCertAct.setStatusTip('Add Cert to Redis')
         addCertAct.triggered.connect(self.on_add_cert)
@@ -611,10 +631,10 @@ class TCPProxyApp(QMainWindow):
 
         menu.addAction(addCertAct)
         toolbar.addAction(addCertAct)
-        
+
         menu.addAction(addFileAct)
         toolbar.addAction(addFileAct)
-        
+
         submitDataAct = QAction(QIcon('icons/commit.png'), '&Commit data to Redis', self)
         submitDataAct.setStatusTip('Submit/Commit data to Redis')
         submitDataAct.triggered.connect(self.on_commit_data)
@@ -625,7 +645,7 @@ class TCPProxyApp(QMainWindow):
         submitDataButton = QPushButton(QIcon('icons/commit.png'), '', self)
         submitDataButton.clicked.connect(self.on_commit_data)
         self.panes.tab_msg.setCornerWidget(submitDataButton)
-        
+
         actiontoolbar = QToolBar("Actions", self)
         reloadItemAction = QAction(QIcon('icons/reload.png'), '&Reload Items', self)
         reloadItemAction.setStatusTip('Reload Items')
@@ -647,20 +667,20 @@ class TCPProxyApp(QMainWindow):
         actiontoolbar.addAction(addItemAction)
         actiontoolbar.addAction(deleteItemAction)
         actiontoolbar.addAction(saveItemAction)
-        
+
         self.panes.tab_settings.setCornerWidget(actiontoolbar)
 
     def initMenuRules(self):
-        
+
         self.panes.convs.signal.connect(self.on_filter_added)
-        
+
         menu = self.menubar.addMenu('&Rules')
         toolbar = self.addToolBar('Rules')
-        
+
         reloadAct = QAction(QIcon('icons/reload.png'), '&Reload Rules', self)
         reloadAct.setStatusTip('Reload Rules')
         reloadAct.triggered.connect(self.on_reload_rules)
-        
+
         addAct = QAction(QIcon('icons/add.png'), '&Add Rule', self)
         addAct.setStatusTip('Add Rule')
         addAct.triggered.connect(self.on_add_rule)
@@ -668,7 +688,7 @@ class TCPProxyApp(QMainWindow):
         saveAct = QAction(QIcon('icons/commit.png'), '&Commit Rules', self)
         saveAct.setStatusTip('Commit Rules')
         saveAct.triggered.connect(self.on_save_rules)
-        
+
         deleteAct = QAction(QIcon('icons/delete.png'), '&Delete Rule', self)
         deleteAct.setStatusTip('Delete Rule')
         deleteAct.triggered.connect(self.on_delete_rule)
@@ -683,13 +703,13 @@ class TCPProxyApp(QMainWindow):
 
         menu.addAction(reloadAct)
         toolbar.addAction(reloadAct)
-        
+
         menu.addAction(addAct)
         toolbar.addAction(addAct)
-        
+
         menu.addAction(saveAct)
         toolbar.addAction(saveAct)
-        
+
         menu.addAction(deleteAct)
         toolbar.addAction(deleteAct)
 
@@ -706,7 +726,7 @@ class TCPProxyApp(QMainWindow):
             self.on_reload_certs()
         elif self.panes.tab_settings.currentIndex() ==  3:
             self.on_reload_files()
-    
+
     @pyqtSlot()
     def on_add_item(self):
         if self.panes.tab_settings.currentIndex() == 0:
@@ -744,7 +764,7 @@ class TCPProxyApp(QMainWindow):
     def on_connect(self):
         try:
             self.tcpproxy =  TCPProxyClient(self.tcpproxy_host)
-        
+
             self.on_reload_rules()
             self.on_reload_convs()
             self.on_connect_debugger()
@@ -756,7 +776,7 @@ class TCPProxyApp(QMainWindow):
         except redis.exceptions.ConnectionError as ex:
             self.statusBar().showMessage('Failed to connect debugger to %s' % self.tcpproxy_host)
             print(ex)
-        
+
     @pyqtSlot()
     def on_disconnect(self):
         self.on_disconnect_debugger()
@@ -780,7 +800,7 @@ class TCPProxyApp(QMainWindow):
             self.panes.certs.add()
         else:
             self.statusBar().showMessage('Cannot add cert. Not connected to Redis')
-        
+
     @pyqtSlot()
     def on_add_file(self):
         if self.tcpproxy:
@@ -813,7 +833,7 @@ class TCPProxyApp(QMainWindow):
                 self.tcpproxy.delete_key(key)
                 self.on_reload_certs()
             else:
-                self.statusBar().showMessage('No certificate selected. Cannot delete.') 
+                self.statusBar().showMessage('No certificate selected. Cannot delete.')
         else:
             self.statusBar().showMessage('Cannot delete certificate. Not connected to Redis')
 
@@ -873,7 +893,7 @@ class TCPProxyApp(QMainWindow):
             for key in self.tcpproxy.get_key_iter("file:*"):
                 parsed = key.decode("utf-8").split(":", 2)
                 files.append({"key":parsed[2], "data":self.tcpproxy.get_key(key), "encoding":parsed[1]})
-                
+
             self.statusBar().showMessage('Loaded %d files from Redis' % len(files))
             self.panes.files.load(files)
         else:
@@ -891,7 +911,7 @@ class TCPProxyApp(QMainWindow):
                 if not mhelp.endswith("\n"):
                     modules += "<br />"
                 i += 1
-                
+
             self.statusBar().showMessage('Loaded %d modules descriptions from Redis' % i)
             self.panes.modules.setText(modules)
         else:
@@ -907,7 +927,7 @@ class TCPProxyApp(QMainWindow):
             self.on_clear_filter()
         else:
             self.statusBar().showMessage('Cannot reload conversations. Not connected to Redis')
-            
+
     @pyqtSlot()
     def on_clear_convs(self):
         if self.tcpproxy:
@@ -930,7 +950,7 @@ class TCPProxyApp(QMainWindow):
             self.data_filter[filter[0]] = [filter[1]]
         else:
             self.data_filter[filter[0]].append(filter[1])
-            
+
         self.panes.data.setRowCount(0)
         self.on_reload_data()
 
@@ -941,7 +961,7 @@ class TCPProxyApp(QMainWindow):
             self.panes.data.setRowCount(0)
             self.panes.convs.clearBackground()
             self.on_reload_data()
-        
+
     @pyqtSlot()
     def on_reload_data(self):
         print (self.data_filter)
@@ -951,9 +971,9 @@ class TCPProxyApp(QMainWindow):
         for msg in self.data_filter_iter():
             self.panes.data.add(msg, i)
             i += 1
-            
+
         self.panes.data.resize()
-        
+
     def data_filter_iter(self, item=None):
         if item:
             data = [item]
@@ -999,10 +1019,10 @@ class TCPProxyApp(QMainWindow):
     def on_data_selected(self):
         self.selected_widget = self.panes.data
         for item in self.panes.data.selectedItems():
-            
+
             id = int(self.panes.data.item(item.row(), 0).text())
             print("Data row selected: %d id: %d" % (item.row(), id))
-        
+
             self.fill_edition(self.data[id]["data"], "base64")
 
     @pyqtSlot()
@@ -1044,8 +1064,10 @@ class TCPProxyApp(QMainWindow):
             if encoding == "base64":
                 data = base64.b64decode(data)
             self.selected_rawdata = data
-            self.reload_hexpane()
             self.reload_strpane()
+            self.reload_hexpane()
+            self.reload_hexstreampane()
+            self.reload_callbackmsgpane()
             self.reload_gzippane()
         else:
             self.clear_edition()
@@ -1056,8 +1078,12 @@ class TCPProxyApp(QMainWindow):
         self.panes.strmsg.clear()
         self.panes.hexmsg.blockSignals(True)
         self.panes.hexmsg.clear()
+        self.panes.hexstreammsg.blockSignals(True)
+        self.panes.hexstreammsg.clear()
         self.panes.gzipmsg.blockSignals(True)
         self.panes.gzipmsg.clear()
+        self.panes.callbackmsg.blockSignals(True)
+        self.panes.callbackmsg.clear()
 
     def reload_strpane(self):
         self.panes.strmsg.blockSignals(True)
@@ -1068,7 +1094,7 @@ class TCPProxyApp(QMainWindow):
         except UnicodeDecodeError as ex:
             pass
         self.panes.strmsg.blockSignals(False)
-    
+
     def reload_hexpane(self):
         self.panes.hexmsg.blockSignals(True)
         self.panes.hexmsg.clear()
@@ -1076,15 +1102,29 @@ class TCPProxyApp(QMainWindow):
         self.panes.hexmsg.setPlainText(hexdata)
         self.panes.hexmsg.blockSignals(False)
 
+    def reload_hexstreampane(self):
+        self.panes.hexstreammsg.blockSignals(True)
+        self.panes.hexstreammsg.clear()
+        hexdata = binascii.hexlify(self.selected_rawdata).decode("utf8")
+        self.panes.hexstreammsg.setPlainText(hexdata)
+        self.panes.hexstreammsg.blockSignals(False)
+
+    def reload_callbackmsgpane(self):
+        self.panes.callbackmsg.blockSignals(True)
+        self.panes.callbackmsg.clear()
+        callbackoutput = ""#binascii.hexlify(self.selected_rawdata)
+        self.panes.callbackmsg.setPlainText(callbackoutput)
+        self.panes.callbackmsg.blockSignals(False)
+
     def reload_gzippane(self):
         import zlib
         self.panes.gzipmsg.blockSignals(True)
         self.panes.gzipmsg.clear()
-        
+
         httpdata = self.selected_rawdata.split(b"\r\n\r\n",2)
         if len(httpdata) != 2:
             httpdata = self.selected_rawdata.split(b"\n\n",2)
-        
+
         # 8-15 : Compression level
         # zlib.MAX_WBITS : zlib format = RFC 1950 = http deflate
         # -zlib.MAX_WBITS : deflate format = RFC 1951 = unzip deflate (negative means no gzip header)
@@ -1097,7 +1137,7 @@ class TCPProxyApp(QMainWindow):
                 break
             except Exception as ex:
                 print("INFO: Exception when trying to decompress data with arg %d: %s" % (args, ex.__str__()))
-                
+
             if len(httpdata) == 2:
                 try:
                     data = zlib.decompress(httpdata[1],args)
@@ -1137,6 +1177,21 @@ class TCPProxyApp(QMainWindow):
         return edit
 
     @pyqtSlot()
+    def on_gziptext_changed(self):
+        text = self.panes.gzipmsg.toPlainText()
+        if text:
+            # TODO gzip text
+            changed = binascii.unhexlify(hexstr)
+            edit = self.diff_data(self.selected_rawdata, changed)
+            print ("Changed data to:",edit)
+            self.selected_rawdata = changed
+            self.reload_strpane()
+            self.reload_hexpane()
+            self.reload_hexstreampane()
+            self.reload_callbackmsgpane()
+            #self.reload_gzippane()
+
+    @pyqtSlot()
     def on_strtext_changed(self):
         unistr = self.panes.strmsg.toPlainText()
         if unistr:
@@ -1144,14 +1199,18 @@ class TCPProxyApp(QMainWindow):
             edit = self.diff_data(self.selected_rawdata, changed)
             print ("Changed data to:",edit)
             self.selected_rawdata = changed
+            #self.reload_strpane()
             self.reload_hexpane()
+            self.reload_hexstreampane()
+            self.reload_callbackmsgpane()
+            self.reload_gzippane()
 
     @pyqtSlot()
     def on_hextext_changed(self):
         hexstr = self.panes.hexmsg.toPlainText()
         if len(hexstr) > 0:
             try:
-                changed =hexdump.restore(hexstr)
+                changed = hexdump.restore(hexstr)
             except ValueError as ex:
                 print("Invalid Hex data: %s" % ex.__str__())
                 p = self.panes.hexmsg.palette()
@@ -1166,6 +1225,38 @@ class TCPProxyApp(QMainWindow):
             print ("Changed data to:",edit)
             self.selected_rawdata = edit
             self.reload_strpane()
+            #self.reload_hexpane()
+            self.reload_hexstreampane()
+            self.reload_callbackmsgpane()
+            self.reload_gzippane()
+
+    @pyqtSlot()
+    def on_hexstream_changed(self):
+        hexstr = self.panes.hexstreammsg.toPlainText()
+        if hexstr:
+            changed = binascii.unhexlify(hexstr)
+            edit = self.diff_data(self.selected_rawdata, changed)
+            print ("Changed data to:",edit)
+            self.selected_rawdata = changed
+            self.reload_strpane()
+            self.reload_hexpane()
+            #self.reload_hexstreampane()
+            self.reload_callbackmsgpane()
+            self.reload_gzippane()
+
+    @pyqtSlot()
+    def on_callbacktext_changed(self):
+        text = self.panes.callbackmsg.toPlainText()
+        if text:
+            changed = binascii.unhexlify(hexstr)
+            edit = self.diff_data(self.selected_rawdata, changed)
+            print ("Changed data to:",edit)
+            self.selected_rawdata = changed
+            self.reload_strpane()
+            self.reload_hexpane()
+            self.reload_hexstreampane()
+            #self.reload_callbackmsgpane()
+            self.reload_gzippane()
 
     @pyqtSlot()
     def on_save_data(self):
@@ -1203,7 +1294,7 @@ class TCPProxyApp(QMainWindow):
         self.inspecter = InspectThread(self.tcpproxy_host)
         self.inspecter.signal.connect(self.on_received_inspect)
         self.inspecter.start()
-        
+
     def on_received_debug(self, msg):
         self.data.append(msg)
         self.panes.convs.add(msg)
