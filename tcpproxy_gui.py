@@ -9,6 +9,7 @@ from tcpproxy_cli import TCPProxyClient
 import redis,json,base64,hexdump,re
 import difflib
 import binascii
+import subprocess
 
 class TCPProxyPaneConvs(QTableWidget):
     fields = [ "src", "dst",  "dstport", "packets", "bytes" , "hostname", "tags" ]
@@ -499,6 +500,11 @@ class TCPProxyApp(QMainWindow):
             self.tcpproxy_host = sys.argv[1]
         else:
             self.tcpproxy_host = "127.0.0.1"
+
+        if len(sys.argv) > 2:
+            self.msg_callback_cmd = sys.argv[2:]
+        else:
+            self.msg_callback_cmd = None
 
         self.tcpproxy = None
         self.debugger = None
@@ -1110,11 +1116,20 @@ class TCPProxyApp(QMainWindow):
         self.panes.hexstreammsg.blockSignals(False)
 
     def reload_callbackmsgpane(self):
-        self.panes.callbackmsg.blockSignals(True)
-        self.panes.callbackmsg.clear()
-        callbackoutput = ""#binascii.hexlify(self.selected_rawdata)
-        self.panes.callbackmsg.setPlainText(callbackoutput)
-        self.panes.callbackmsg.blockSignals(False)
+        if self.msg_callback_cmd:
+            self.panes.callbackmsg.blockSignals(True)
+            self.panes.callbackmsg.clear()
+
+            # Send hex message to callback command
+            hexdata = binascii.hexlify(self.selected_rawdata).decode("utf8")
+            cmd = self.msg_callback_cmd.copy()+[hexdata]
+            stdout, stderr = subprocess.Popen(cmd,stdout=subprocess.PIPE).communicate()
+            if stderr:
+                print("Error ouput from callback %s:" % " ".join(cmd))
+                print(stderr)
+
+            self.panes.callbackmsg.setPlainText(stdout.decode("utf8"))
+            self.panes.callbackmsg.blockSignals(False)
 
     def reload_gzippane(self):
         import zlib
@@ -1248,6 +1263,9 @@ class TCPProxyApp(QMainWindow):
     def on_callbacktext_changed(self):
         text = self.panes.callbackmsg.toPlainText()
         if text:
+            print ("Changed data to:",text)
+            # Todo allow interpretation of the output by the external callabck script
+            '''
             changed = binascii.unhexlify(hexstr)
             edit = self.diff_data(self.selected_rawdata, changed)
             print ("Changed data to:",edit)
@@ -1257,6 +1275,7 @@ class TCPProxyApp(QMainWindow):
             self.reload_hexstreampane()
             #self.reload_callbackmsgpane()
             self.reload_gzippane()
+            '''
 
     @pyqtSlot()
     def on_save_data(self):
