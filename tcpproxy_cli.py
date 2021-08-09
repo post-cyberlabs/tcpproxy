@@ -18,7 +18,6 @@ class TCPProxyClient:
     def __init__(self, host):
         print ("Connecting to redis on host %s ..." % host)
         self.r = redis.StrictRedis(host=host)
-        print ("Connected")
 
     def print_packet(self, msg, level="DEBUG"):
         for key,value in msg.items():
@@ -54,7 +53,7 @@ class TCPProxyClient:
             toprint.append(msg["tags"])
 
         print('\t'.join(toprint))
-        
+
         if "data" in msg:
             if "level" not in msg or msg["level"] == "DEBUG":
                 hexdump.hexdump(base64.b64decode(msg["data"]))
@@ -81,10 +80,10 @@ class TCPProxyClient:
 
     def get_key(self, key):
         return self.r.get(key)
-    
+
     def delete_key(self,  key):
         self.r.delete(key)
-    
+
     def set_key(self, key, value):
         self.r.set(key, value)
 
@@ -172,13 +171,13 @@ class TCPProxyClient:
 
     def disable_interception(self):
         self.r.set("debugging",0)
-        
+
     def toggle_interception(self):
         if is_intercepting():
             self.disable_interception()
         else:
             self.enable_interception()
-            
+
     def is_intercepting(self):
         return self.r.get("debugging") == 1
 
@@ -243,7 +242,7 @@ class TCPProxyClient:
             "hostname":b"Hostname",
             "tags":[b"Tags"]
         })
-        
+
         self.print_stats("stats:connections")
 
     def print_rules(self):

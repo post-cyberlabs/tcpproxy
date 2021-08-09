@@ -133,7 +133,7 @@ class TCPProxyPaneConvs(QTableWidget):
 
 class DebugThread(QThread):
     signal = pyqtSignal('PyQt_PyObject')
-
+    status = pyqtSignal('PyQt_PyObject')
     def __init__(self, hostname):
         self.running = False
         self.hostname = hostname
@@ -142,7 +142,13 @@ class DebugThread(QThread):
 
     def run(self):
         self.running = True
-        self.client.register_debug()
+        try:
+            self.client.register_debug()
+        except Exception as ex:
+            print("Exception connecting to Redis")
+            print(ex)
+            self.status.emit('Error initiating debug connection to Redis')
+            return
         while self.running:
             try:
                 for msg in self.client.debug_iter(timeout=1):
@@ -150,13 +156,21 @@ class DebugThread(QThread):
             except redis.exceptions.ConnectionError as ex:
                 print("Error connecting to Redis")
                 print(ex)
-                time.sleep(10)
-                self.client = TCPProxyClient(self.hostname)
-                self.client.register_debug()
+                self.status.emit('Debugger connection to Redis lost')
+                return
+                #time.sleep(10)
+                #self.client = TCPProxyClient(self.hostname)
+                #self.client.register_debug()
+            except Exception as ex:
+                print("Exception retrieving data from Redis")
+                print(ex)
+                self.status.emit('Debugger connection to Redis lost')
+                return
+
 
 class InspectThread(QThread):
     signal = pyqtSignal('PyQt_PyObject')
-
+    status = pyqtSignal('PyQt_PyObject')
     def __init__(self, hostname):
         self.running = False
         self.hostname = hostname
@@ -165,7 +179,13 @@ class InspectThread(QThread):
 
     def run(self):
         self.running = True
-        self.client.register_inspect()
+        try:
+            self.client.register_inspect()
+        except Exception as ex:
+            print("Exception connecting to Redis")
+            print(ex)
+            self.status.emit('Error initiating inspector connection to Redis')
+            return
         while self.running:
             try:
                 for msg in self.client.inspect_iter(timeout=1):
@@ -173,9 +193,16 @@ class InspectThread(QThread):
             except redis.exceptions.ConnectionError as ex:
                 print("Error connecting to Redis")
                 print(ex)
-                time.sleep(10)
-                self.client = TCPProxyClient(self.hostname)
-                self.client.register_inspect()
+                self.status.emit('Inspector connection to Redis lost')
+                return
+                #time.sleep(10)
+                #self.client = TCPProxyClient(self.hostname)
+                #self.client.register_inspect()
+            except Exception as ex:
+                print("Exception retrieving data from Redis")
+                print(ex)
+                self.status.emit('Inspector connection to Redis lost')
+                return
 
 class TCPProxyPaneFile(QTableWidget):
 
@@ -1306,13 +1333,19 @@ class TCPProxyApp(QMainWindow):
 
     @pyqtSlot()
     def on_connect_debugger(self):
+        print ("Connecting debugger...")
         self.statusBar().showMessage('Connecting debugger...')
         self.debugger = DebugThread(self.tcpproxy_host)
         self.debugger.signal.connect(self.on_received_debug)
+        self.debugger.status.connect(self.on_received_status)
         self.debugger.start()
         self.inspecter = InspectThread(self.tcpproxy_host)
         self.inspecter.signal.connect(self.on_received_inspect)
+        self.inspecter.status.connect(self.on_received_status)
         self.inspecter.start()
+
+    def on_received_status(self, msg):
+        self.statusBar().showMessage(msg)
 
     def on_received_debug(self, msg):
         self.data.append(msg)
